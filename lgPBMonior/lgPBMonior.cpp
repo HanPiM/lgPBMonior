@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <memory>
+#include <thread>
 
 #include <stdio.h>
 
@@ -174,6 +175,104 @@ int get_change_count(const std::string& a, const std::string& b)
 	return cnt;
 }
 
+auto cimg_color(unsigned char r, unsigned char g, unsigned char b)
+{
+	unsigned char* res = new unsigned char[3];
+	res[0] = r, res[1] = g, res[2] = b;
+	return std::shared_ptr<unsigned char>(res);
+};
+
+struct
+{
+	int x0, y0, x1, y1;
+}g_hight_light;
+
+void input_proc()
+{
+	std::string s, x;
+	std::vector<std::string> args;
+	std::istringstream iss;
+
+	auto high_light = [](int x0, int y0, int x1, int y1)
+	{
+		g_hight_light.x0 = x0;
+		g_hight_light.y0 = y0;
+		g_hight_light.x1 = x1;
+		g_hight_light.y1 = y1;
+	};
+	while (1)
+	{
+		std::cout << ">>>";
+		std::getline(std::cin, s);
+		iss.clear(); iss.str(s);
+		args.clear();
+		while (iss >> x)args.push_back(x);
+		if (args.empty())continue;
+		std::string& cmd = args[0];
+		if (cmd == "highlight")
+		{
+			if (args.size() < 5)
+			{
+				continue;
+			}
+			high_light(std::stoi(args[1]), std::stoi(args[2]), std::stoi(args[3]), std::stoi(args[4]));
+		}
+		else if (cmd == "cnt")
+		{
+			if (args.size() < 2)continue;
+			if (args[1] == "change")
+			{
+
+			}
+			else if (args[1] == "user")
+			{
+
+			}
+		}
+	}
+}
+
+void draw_argb_pix(board::img_t& img, int x, int y, board::_rgb col, unsigned a)
+{
+	if (x >= img.width() || y >= img.height())return;
+	int offest = img.width() * img.height();
+	const static auto _f = [&img, &offest](int x, int y, int c)->unsigned char&
+	{
+		return img.data()[offest * c + y * img.width() + x];
+	};
+	const static auto f = [](int x, int y)
+	{
+		return board::_rgb(_f(x, y, 0), _f(x, y, 1), _f(x, y, 2));
+	};
+	const static auto set = [](int x, int y, board::_rgb c)
+	{
+		_f(x, y, 0) = c.r, _f(x, y, 1) = c.g, _f(x, y, 2) = c.b;
+	};
+	if (a == 0xff)set(x, y, col);
+	else
+	{
+		board::_rgb c = f(x, y);
+		using uch = unsigned char;
+		c.r = (uch)(((255 - a) * c.r + col.r * a) / 255);
+		c.g = (uch)(((255 - a) * c.g + col.g * a) / 255);
+		c.b = (uch)(((255 - a) * c.b + col.b * a) / 255);
+		//c.a = 255 - (255 - c.a) * (255 - a) / 255;
+		set(x, y, c);
+	}
+}
+
+void draw_argb_rect(board::img_t& img, int x0, int y0, int x1, int y1, board::_rgb col, unsigned a)
+{
+	for (int i = x0; i < x1; ++i)
+	{
+		for (int j = y0; j < y1; ++j)
+		{
+			draw_argb_pix(img, i, j, col, a);
+		}
+	}
+}
+
+
 int main()
 {
 
@@ -189,18 +288,11 @@ int main()
 	board::img_t img1(PBW, PBH, 1, 3, 0);
 	board::img_t scrolling_img(SW, 200, 1, 3, 0);
 	board::img_t showimg(1400, PBH, 1, 3);
-	cimg_library::CImgDisplay disp(showimg, "LuoguWinterPaintBoard-Monior");
+	cimg_library::CImgDisplay disp = cimg_library::CImgDisplay(showimg, "LuoguWinterPaintBoard-Monior");
 
 	unsigned char col_textfore[] = { 40,40,40 };
 	unsigned char col_back[] = { 205,205,205 };
 	unsigned char col_[] = { 205,205,205 };
-
-	auto cimg_color = [](unsigned char r, unsigned char g, unsigned char b)
-	{
-		unsigned char* res = new unsigned char[3];
-		res[0] = r, res[1] = g, res[2] = b;
-		return std::shared_ptr<unsigned char>(res);
-	};
 
 	std::string change_count_info;
 	int change_cnt = 0;
@@ -211,7 +303,7 @@ int main()
 	int times = 0;
 	int sum = 0, avg;
 
-	//disp.
+	std::thread input_th(input_proc);
 
 	while (!disp.is_closed())
 	{
@@ -265,10 +357,18 @@ int main()
 		showimg.draw_line(PBW + 5, 45 + pos1, PBW + SW + 4, 45 + pos1, cimg_color(150, 0, 0).get());
 		showimg.draw_text(PBW + 5, 45 + pos1 - 6, "avg: %d", cimg_color(250, 60, 50).get(), 0, 1, 14, avg);
 
+		draw_argb_rect(
+			showimg,
+			g_hight_light.x0, g_hight_light.y0,
+			g_hight_light.x1, g_hight_light.y1,
+			_rgb(255, 0, 0), 80
+		);
 		//scrolling_img.draw_image(0, 0, );
 
 		showimg.display(disp);
 		Sleep(5);
 	}
+
+	//input_th.join();
 	return 0;
 }
